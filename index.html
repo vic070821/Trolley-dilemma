@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>트롤리 딜레마 (이모지판)</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: sans-serif;
+      text-align: center;
+      background: #f7f7f7;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    #start-screen {
+      margin-top: 100px;
+    }
+    #game, #result {
+      display: none;
+    }
+    /* 게임 화면 배경 (분기된 트랙 이미지) */
+    #game {
+      position: relative;
+      width: 800px;
+      height: 600px;
+      margin: 20px auto;
+      background: url('split.png') no-repeat center center;
+      background-size: contain;
+    }
+    /* 옵션: 투명 배경, 테두리/그림자 제거 */
+    .option {
+      position: absolute;
+      width: auto;
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      text-align: center;
+    }
+    .option .emoji {
+      font-size: 48px;
+      display: block;
+    }
+    /* 레이블에만 흰 배경과 패딩 추가 */
+    .option .label {
+      display: inline-block;
+      margin-top: 4px;
+      font-size: 18px;
+      background: rgba(255,255,255,0.9);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .option .choice-button {
+      margin-top: 6px;
+      padding: 6px 12px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      background: #4285f4;
+      color: #fff;
+    }
+    /* 분기된 위/아래 레일 위에 배치 */
+    .option.top    { top: 35%; left: 75%; transform: translate(-50%, -50%); }
+    .option.bottom { top: 65%; left: 75%; transform: translate(-50%, -50%); }
+
+    /* 결과 화면 스타일 */
+    #result {
+      margin-top: 30px;
+    }
+    #result table {
+      margin: 0 auto;
+      border-collapse: collapse;
+      font-size: 16px;
+    }
+    #result th, #result td {
+      border: 1px solid #ccc;
+      padding: 8px 12px;
+    }
+    #result tr.highlight {
+      background: #eef;
+      font-weight: bold;
+    }
+    #retry-button {
+      margin-top: 16px;
+      padding: 8px 16px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      background: #4285f4;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🚃 트롤리 딜레마 (이모지판)</h1>
+
+  <div id="start-screen">
+    <button id="start-button">시작하기</button>
+  </div>
+
+  <div id="game"></div>
+  <div id="result"></div>
+
+  <script>
+    // [왼쪽 이모지, 왼쪽 라벨, 왼쪽 점수, 오른쪽 이모지, 오른쪽 라벨, 오른쪽 점수]
+    const data = [
+      ["🧑‍🔬","과학자 (1명)",  85, "👤👤👤👤👤","일반인 (5명)",300],
+      ["👫","친구 (1명)",      80, "👤👤👤","낯선 사람 (3명)",150],
+      ["🐶🐶","강아지 (2마리)", 60, "🐱🐱🐱🐱🐱","고양이 (5마리)",90],
+      ["🧓","노인 (1명)",      30, "👶","어린이 (1명)",100],
+      ["🤰","임산부 (1명)",    95, "👶","신생아 (1명)",100],
+      ["🙂","나 (1명)",      100, "👪","가족 (3명)",270],
+      ["🚓🚓","죄수 (2명)",    20, "👨‍🎓👩‍🎓","학생 (2명)",70],
+      ["🌿","환경운동가 (1명)",85, "🏹","사냥꾼 (1명)",40],
+      ["🤖","AI 로봇 (1기)",  10, "👤","사람 (1명)",60],
+      ["🎤","유명 연예인 (1명)",50, "🎨","무명 예술가 (1명)",50],
+      ["👧🐱","아이+고양이",   70, "🧓🐶","노인+강아지",50],
+      ["🪖","전직 군인 (1명)", 75, "👩‍⚕️","의사 (1명)",85],
+      ["🎮🎮🎮","피규어 (100개)",10, "📚","고서 (1권)",25],
+      ["🔬💉","연구자 (1명)",  85, "🩺","간호사 (100명)",75],
+      ["😴","자는 사람 (1명)",30, "🏃","도망치는 사람 (1명)",50]
+    ];
+
+    // 성향 구간 정의
+    const ranges = [
+      { emoji:'💖', label:'생명 존중주의자',    min:   0, max:  599 },
+      { emoji:'⚖️', label:'실용주의자',        min: 600, max:  999 },
+      { emoji:'😊', label:'감정 중심주의자',    min:1000, max: 1399 },
+      { emoji:'🧊', label:'냉정한 이성주의자',  min:1400, max: Infinity },
+    ];
+
+    let idx = 0, total = 0;
+
+    document.getElementById('start-button').onclick = () => {
+      document.getElementById('start-screen').style.display = 'none';
+      document.getElementById('game').style.display = 'block';
+      render();
+    };
+
+    function render() {
+      const game = document.getElementById('game');
+      game.innerHTML = '';
+      if (idx >= data.length) {
+        return showResult();
+      }
+
+      const [eL, tL, scoreL, eR, tR, scoreR] = data[idx];
+
+      // 왼쪽 옵션 (위 레일)
+      const leftDiv = makeOption(eL, tL, scoreR, '위쪽');
+      leftDiv.classList.add('option','top');
+
+      // 오른쪽 옵션 (아래 레일)
+      const rightDiv = makeOption(eR, tR, scoreL, '아래쪽');
+      rightDiv.classList.add('option','bottom');
+
+      game.appendChild(leftDiv);
+      game.appendChild(rightDiv);
+    }
+
+    function makeOption(emoji, label, sacrifice, side) {
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <div class="emoji">${emoji}</div>
+        <div class="label">${label}</div>
+        <button class="choice-button">${side} 선택</button>
+      `;
+      div.querySelector('button').onclick = () => {
+        total += sacrifice;
+        idx++;
+        render();
+      };
+      return div;
+    }
+
+    function showResult() {
+      document.getElementById('game').style.display = 'none';
+      const resDiv = document.getElementById('result');
+
+      const me = ranges.find(r => total >= r.min && total <= r.max);
+
+      let html = `<div>당신의 희생 점수: <strong>${total}</strong></div>`;
+      html += `<table><tr><th>성향</th><th>점수 범위</th></tr>`;
+      for (const r of ranges) {
+        const rangeText = r.max === Infinity
+          ? `${r.min} 이상`
+          : `${r.min} ~ ${r.max}`;
+        const highlight = (r === me) ? ' class="highlight"' : '';
+        html += `<tr${highlight}><td>${r.emoji} ${r.label}</td><td>${rangeText}</td></tr>`;
+      }
+      html += `</table>
+               <div style="margin-top:16px;">당신의 성향: <strong>${me.emoji} ${me.label}</strong></div>
+               <button id="retry-button">다시하기</button>`;
+
+      resDiv.innerHTML = html;
+      resDiv.style.display = 'block';
+
+      document.getElementById('retry-button').onclick = () => {
+        idx = 0; total = 0;
+        resDiv.style.display = 'none';
+        document.getElementById('game').style.display = 'block';
+        render();
+      };
+    }
+  </script>
+</body>
+</html>
